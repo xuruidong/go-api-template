@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.2/configuration-schema.json
+#
+# oapi-codegen 服务端生成配置。
+# 由 internal/api/generate.go 中的 go:generate 调用：
+#
+#   //go:generate go tool oapi-codegen -config cfg.yaml ../../api/openapi.yaml
+#
+# 注意：output 与 spec 路径都相对于“执行 go generate 时的包目录”，
+# 即 internal/api/。
+package: api
+
+generate:
+  # chi 路由适配层：生成 ServerInterface / HandlerFromMux 等。
+  chi-server: true
+  # 严格模式：每个 handler 接收强类型 RequestObject，返回强类型 ResponseObject，
+  # 自动完成请求体解码、响应序列化与 Content-Type/状态码设置。
+  # 注意：strict-server 必须配合上面某个具体 server 一起开启。
+  strict-server: true
+  # 生成数据模型（Todo、Problem 等）。
+  models: true
+  # 将 OpenAPI 文档嵌入生成代码，运行时可通过 GetSwagger() 获取，
+  # 供请求校验中间件和 /openapi.json 使用。
+  embedded-spec: true
+
+output: server.gen.go
+
+output-options:
+  # 让 ID、HTTP、URL、API 等缩写符合 Go 命名习惯（如 path 参数 id -> ID）。
+  name-normalizer: ToCamelCaseWithInitialisms

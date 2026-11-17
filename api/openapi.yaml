@@ -1,0 +1,366 @@
+openapi: 3.0.3
+
+info:
+  title: Todo API
+  version: 0.1.0
+  description: |
+    `go-api-template` 的示例 API：一个最小的待办事项（Todo）服务。
+
+    本文件是**唯一的 API 契约来源**。执行 `make generate` 后会据此生成：
+
+    - 服务端路由、严格模式（strict server）接口与数据模型：`internal/api/server.gen.go`
+    - 供集成测试与外部调用方使用的类型化客户端：`pkg/client/client.gen.go`
+
+    修改接口的正确姿势是**先改本文件，再重新生成代码**，而不是手写路由或 DTO。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发环境
+security:
+  # 默认所有接口都需要 Bearer Token；个别公开接口通过 security: [] 覆盖。
+  - bearerAuth: []
+
+tags:
+  - name: system
+    description: 系统与运维接口
+  - name: todos
+    description: 待办事项管理
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      tags: [system]
+      summary: 健康检查
+      description: 返回服务健康状态。无需鉴权，可用于 Kubernetes 的存活/就绪探针。
+      security: []
+      responses:
+        '200':
+          description: 服务健康
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /todos:
+    get:
+      operationId: listTodos
+      tags: [todos]
+      summary: 查询待办列表
+      description: 按创建顺序（ID 升序）返回分页结果，支持按完成状态过滤和按标题搜索。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Completed'
+        - $ref: '#/components/parameters/Query'
+      responses:
+        '200':
+          description: 待办列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodoList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createTodo
+      tags: [todos]
+      summary: 创建待办
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTodoRequest'
+      responses:
+        '201':
+          description: 创建成功
+          headers:
+            Location:
+              description: 新创建待办的资源地址
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /todos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TodoID'
+    get:
+      operationId: getTodo
+      tags: [todos]
+      summary: 查询单个待办
+      responses:
+        '200':
+          description: 待办详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateTodo
+      tags: [todos]
+      summary: 局部更新待办
+      description: 只更新请求体中出现的字段；空请求体会被参数校验拒绝。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTodoRequest'
+      responses:
+        '200':
+          description: 更新后的待办
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteTodo
+      tags: [todos]
+      summary: 删除待办
+      responses:
+        '204':
+          description: 删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Bearer Token 鉴权，请求头格式：`Authorization: Bearer <token>`。
+
+        模板内置的是单 Token 校验（见 `internal/server/auth.go`），
+        生产环境请替换为 JWT / OIDC / 网关透传等真实校验逻辑。
+
+  parameters:
+    TodoID:
+      name: id
+      in: path
+      required: true
+      description: 待办 ID
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 单页返回条数上限
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: 分页偏移量
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+
+    Completed:
+      name: completed
+      in: query
+      required: false
+      description: 按完成状态过滤；不传表示不过滤
+      schema:
+        type: boolean
+
+    Query:
+      name: q
+      in: query
+      required: false
+      description: 按标题模糊搜索（不区分大小写）
+      schema:
+        type: string
+        maxLength: 100
+
+  schemas:
+    Todo:
+      type: object
+      description: 待办事项
+      additionalProperties: false
+      required: [id, title, completed, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 唯一标识，由服务端生成
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: 学习 oapi-codegen
+        description:
+          type: string
+          maxLength: 2000
+          description: 可选的详细说明
+        completed:
+          type: boolean
+          description: 是否已完成
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间（RFC 3339）
+        updatedAt:
+          type: string
+          format: date-time
+          description: 最后更新时间（RFC 3339）
+
+    TodoList:
+      type: object
+      description: 分页后的待办列表
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          description: 当前页的待办
+          items:
+            $ref: '#/components/schemas/Todo'
+        total:
+          type: integer
+          format: int64
+          description: 满足过滤条件的总条数（不是当前页条数）
+        limit:
+          type: integer
+          format: int32
+          description: 生效的单页条数
+        offset:
+          type: integer
+          format: int32
+          description: 生效的分页偏移量
+
+    CreateTodoRequest:
+      type: object
+      description: 创建待办的请求体
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: 学习 oapi-codegen
+        description:
+          type: string
+          maxLength: 2000
+        completed:
+          type: boolean
+          default: false
+
+    UpdateTodoRequest:
+      type: object
+      description: 局部更新的请求体，至少提供一个字段
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        completed:
+          type: boolean
+
+    Health:
+      type: object
+      description: 健康检查结果
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          description: 固定为 ok
+        version:
+          type: string
+          description: 服务版本（构建时注入）
+        time:
+          type: string
+          format: date-time
+          description: 服务端当前时间
+
+    Problem:
+      type: object
+      description: |
+        RFC 9457 风格的错误响应体。
+        所有非 2xx 响应都使用该结构，便于客户端统一处理。
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: 错误类型 URI，默认为 about:blank
+          example: about:blank
+        title:
+          type: string
+          description: 人类可读的错误概述
+          example: Not Found
+        status:
+          type: integer
+          format: int32
+          description: HTTP 状态码
+          example: 404
+        detail:
+          type: string
+          description: 针对本次错误的详细说明
+          example: todo 42 not found
+        instance:
+          type: string
+          description: 发生错误的请求路径
+          example: /todos/42
+        code:
+          type: string
+          description: 机器可读错误码，便于客户端分支处理
+          example: not_found
+
+  responses:
+    BadRequest:
+      description: 请求参数或请求体不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: 缺少或无效的认证信息
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'

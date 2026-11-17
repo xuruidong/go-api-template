@@ -1,0 +1,8 @@
+.git
+bin
+coverage.out
+coverage.html
+.idea
+.vscode
+*.md
+Makefile

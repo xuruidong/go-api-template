@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.2/configuration-schema.json
+#
+# oapi-codegen 客户端生成配置。
+# 由 pkg/client/generate.go 中的 go:generate 调用：
+#
+#   //go:generate go tool oapi-codegen -config cfg.yaml ../../api/openapi.yaml
+#
+# 生成的类型化客户端用于：
+#   1. 集成测试（以真实 HTTP 方式调用服务）
+#   2. 其他 Go 服务调用本 API
+package: client
+
+generate:
+  client: true
+  models: true
+
+output: client.gen.go
+
+output-options:
+  # 与服务端保持一致，否则同一字段会生成 Id / ID 两种写法，跨包使用时容易出错。
+  name-normalizer: ToCamelCaseWithInitialisms

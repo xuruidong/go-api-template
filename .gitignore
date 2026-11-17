@@ -1,0 +1,16 @@
+bin/
+coverage.out
+coverage.html
+*.exe
+*.test
+*.out
+
+# 本地环境变量文件（不要提交真实密钥）
+.env
+.env.local
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+.DS_Store
